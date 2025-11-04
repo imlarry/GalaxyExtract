@@ -1,7 +1,7 @@
 Name: GalaxyExtract
 Description: Scrape the galaxy map
 Author: L.Goodhind with memory scan based on (shudson) https://github.com/shudson6/EGS-GalacticWaez.git
-Version: 1.00.0
+Version: 1.00.1
 
 # Possible targets: None, Client
 ModTargets: Client # set to Client to enable

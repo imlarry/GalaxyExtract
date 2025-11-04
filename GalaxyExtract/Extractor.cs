@@ -45,6 +45,7 @@ namespace GalaxyExtract
 
         // Runtime-initialized fields
         private string outputPath;
+        private string sectorPath;
         private byte[] searchPattern;
 
         IModApi modApi;
@@ -56,7 +57,6 @@ namespace GalaxyExtract
         public void Init(IModApi modApi)
         {
             this.modApi = modApi;
-            InitializePaths();
 
             modApi.Application.GameEntered += OnGameEntered;
             modApi.Log("GalaxyExtractor mod initialized");
@@ -64,45 +64,44 @@ namespace GalaxyExtract
 
         private void InitializePaths()
         {
-            // Get save game directory and build output path
+            // Get save game path - both output and sector files are rooted from here
             var saveGamePath = modApi.Application.GetPathFor(AppFolder.SaveGame);
+            modApi.Log(string.Format("GalaxyExtractor: SaveGame path: {0}", saveGamePath ?? "NULL"));
+
             var fullPath = Path.GetFullPath(saveGamePath);
+            modApi.Log(string.Format("GalaxyExtractor: Full path: {0}", fullPath ?? "NULL"));
+
+            // Set output file path
             outputPath = Path.Combine(fullPath, "Content", "Mods", "GalaxyExtract", "galaxy.csv");
+            modApi.Log(string.Format("GalaxyExtractor: Output path set to {0}", outputPath ?? "NULL"));
 
-            modApi.Log(string.Format("GalaxyExtractor: Output path set to {0}", outputPath));
-
-            // Get star name from sectors.yaml
-            string searchStarName = GetFirstSolarSystemName();
-            if (string.IsNullOrEmpty(searchStarName))
-            {
-                searchStarName = "Ellyon"; // Fallback default
-                modApi.Log("GalaxyExtractor: Could not read star name from sectors.yaml, using default: Ellyon");
-            }
-            else
-            {
-                modApi.Log(string.Format("GalaxyExtractor: Star name set to '{0}' from sectors.yaml", searchStarName));
-            }
-
-            searchPattern = Encoding.ASCII.GetBytes(searchStarName);
+            // Set sector file path (copy exists in save game directory)
+            sectorPath = Path.Combine(fullPath, "Sectors", "Sectors.yaml");
+            modApi.Log(string.Format("GalaxyExtractor: Sector path set to {0}", sectorPath ?? "NULL"));
         }
 
         private string GetFirstSolarSystemName()
         {
             try
             {
-                var scenarioPath = modApi.Application.GetPathFor(AppFolder.ActiveScenario);
-                var sectorsFile = Path.Combine(scenarioPath, "Sectors", "Sectors.yaml");
+                modApi.Log(string.Format("GalaxyExtractor: Reading sectors file from {0}", sectorPath));
 
-                modApi.Log(string.Format("GalaxyExtractor: Reading sectors file from {0}", sectorsFile));
-
-                if (!File.Exists(sectorsFile))
+                if (!File.Exists(sectorPath))
                 {
                     modApi.Log("GalaxyExtractor: Sectors.yaml file not found");
                     return null;
                 }
 
+                // Open file with read-only access and allow sharing in case game has it open
+                string fileContent;
+                using (var fileStream = new FileStream(sectorPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var streamReader = new StreamReader(fileStream))
+                {
+                    fileContent = streamReader.ReadToEnd();
+                }
+
                 var deserializer = new DeserializerBuilder().IgnoreUnmatchedProperties().Build();
-                using (var reader = new StringReader(File.ReadAllText(sectorsFile)))
+                using (var reader = new StringReader(fileContent))
                 {
                     var sectors = deserializer.Deserialize<SectorsFile>(reader);
 
@@ -127,19 +126,30 @@ namespace GalaxyExtract
             if (!entered)
                 return;
 
-            if (ShouldSkipExtraction())
+            // Initialize paths now that the game and scenario are loaded
+            InitializePaths();
+
+            // Check if CSV already exists - if so, extraction was done previously
+            if (File.Exists(outputPath))
             {
                 modApi.Log(string.Format("GalaxyExtractor: Output file already exists at {0}, skipping extraction", outputPath));
                 modApi.GUI.ShowGameMessage("Galaxy data already extracted - file exists", prio: 1);
                 return;
             }
 
-            PerformExtraction();
-        }
+            // Get the first star name from sectors.yaml to use as search pattern
+            string searchStarName = GetFirstSolarSystemName();
+            if (string.IsNullOrEmpty(searchStarName))
+            {
+                modApi.Log("GalaxyExtractor: Could not read star name from sectors.yaml, skipping extraction");
+                modApi.GUI.ShowGameMessage("Galaxy extraction skipped - sectors.yaml missing or invalid", prio: 1);
+                return;
+            }
 
-        private bool ShouldSkipExtraction()
-        {
-            return File.Exists(outputPath);
+            // Do the deed
+            modApi.Log(string.Format("GalaxyExtractor: Star name set to '{0}' from sectors.yaml", searchStarName));
+            searchPattern = Encoding.ASCII.GetBytes(searchStarName);
+            PerformExtraction();
         }
 
         private void PerformExtraction()
