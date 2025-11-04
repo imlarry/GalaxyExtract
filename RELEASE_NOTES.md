@@ -1,8 +1,18 @@
 # Release Notes
 
+## v1.0.1 - ActiveScenario fix
+
+**Release Date**: 11/4/2025
+
+### Change Log
+
+- changed use of ActiveScenario path to SaveGame to reference the active Sectors.yaml
+- reorganized init to simplify and avoid a potential race condition
+- added additional logging and NULL substitution to confirm path info
+
 ## v1.0.0 - Initial Release
 
-**Release Date**: [Date]
+**Release Date**: 11/2/2025
 
 ### What's New
 
